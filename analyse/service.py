@@ -7,6 +7,7 @@ from _decimal import Decimal
 from matplotlib import ticker
 from openpyxl.reader.excel import load_workbook
 
+import data.transfer
 from analyse.bo import OperateItem, CostOfLevelInfo
 from analyse.models import OperateRecord
 import numpy as np
@@ -133,16 +134,23 @@ def analyseSpecificBond(bondCode):
             print("unitPrice:", temp.unitPrice, "share:", temp.share)
         # print(bondCode + "筹码水平为:" +costOfLevelList)
     print("手续费:", totalFee, "盈利:", profit, "亏损:", loss)
+
+    presentPrice = data.transfer.getAllDayDataOfSpecificETF(bondCode).iloc[-1, 4]
+
     # 筹码水平可视化
     # x轴:份额 y轴:价格
     unitPrice = [float(costOfLevel.unitPrice) for costOfLevel in costOfLevelList]
     share = [float(costOfLevel.share) for costOfLevel in costOfLevelList]
     # plt.gca().yaxis.set_major_locator(ticker.MultipleLocator(base=15))
-    plt.barh(unitPrice, share, height=0.002, color='blue')
+    plt.barh(unitPrice, share, height=0.001, color='blue')
     plt.ylabel('price')
     plt.xlabel('share')
     plt.title('Shares Distribution of Different Prices')
+
+    plt.axhline(y=presentPrice, color='red', linestyle='--', label='present price')
+
     plt.show()
+
     return costOfLevelList
 
 

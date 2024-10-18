@@ -8,9 +8,10 @@ from django.shortcuts import render
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
+import analyse
 from analyse.bo import OperateItem
 from analyse.models import OperateRecord
-from analyse.service import analyseSpecificBond, addOperateRecord
+from analyse.service import analyseSpecificBond, addOperateRecord, analyseCostChangeOfSpecificBond
 
 
 def test(request):
@@ -39,3 +40,22 @@ def add(request):
         return HttpResponse(json.dumps(result, ensure_ascii=False))
     except Exception as e:
         return HttpResponse(json.dumps({"code":500,"msg":"导入错误"}, ensure_ascii=False))
+
+
+def analyseCostChange(request):
+    bondCode = request.GET.get("bondCode")
+    result = analyseCostChangeOfSpecificBond(bondCode)
+    book_list = [
+        {'id': 1, 'name': 'ptyhon'},
+        {'id': 2, 'name': 'go'},
+    ]
+    return HttpResponse(json.dumps(book_list), content_type='application/json')
+
+def xirr_calculate(request):
+    bondCode = request.GET.get("bondCode")
+    result = analyse.service.xirr_calculate(bondCode)
+    book_list = [
+        {'id': 1, 'name': 'ptyhon'},
+        {'id': 2, 'name': 'go'},
+    ]
+    return HttpResponse(json.dumps(book_list), content_type='application/json')

@@ -10,6 +10,6 @@ def getAllETFBasicInfo():
 # 获取某个ETF的日线数据
 def getAllDayDataOfSpecificETF(code):
     originalData = datasource1.getAllDayDataOfSpecificETF(code)
-    print(originalData)
+    # print(originalData)
     return originalData
 

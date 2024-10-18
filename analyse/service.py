@@ -1,11 +1,15 @@
 import logging
 import queue
+from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
+import numpy_financial as npf
+from pyxirr import xirr
 
 from _decimal import Decimal
 from matplotlib import ticker
 from openpyxl.reader.excel import load_workbook
+from scipy.optimize import newton
 
 import data.transfer
 from analyse.bo import OperateItem, CostOfLevelInfo
@@ -135,6 +139,7 @@ def analyseSpecificBond(bondCode):
         # print(bondCode + "筹码水平为:" +costOfLevelList)
     print("手续费:", totalFee, "盈利:", profit, "亏损:", loss)
 
+    # 获取最新的收盘价
     presentPrice = data.transfer.getAllDayDataOfSpecificETF(bondCode).iloc[-1, 4]
 
     # 筹码水平可视化
@@ -223,3 +228,126 @@ def addOperateRecord(file_obj):
 
 
     return {'code': 200, 'data': {}, 'msg': '导入' + str(importTotalCount) + '条成功'}
+
+
+def analyseCostChangeOfSpecificBond(bondCode):
+    # 从数据库中查询该证劵交易编码对应的交易记录 按交易时间升序排序
+    operateRecordList = OperateRecord.objects.filter(bond_code=bondCode).order_by('bargain_time')
+
+    # 计算每日持仓成本
+    daily_cost = calculate_daily_cost(operateRecordList)
+    holding_cost = get_daily_holding_cost(daily_cost)
+
+    # 准备绘图数据
+    dates = [item[0] for item in holding_cost]
+    costs = [item[1] for item in holding_cost]
+
+    # 设置中文字体
+    plt.rcParams['font.sans-serif'] = ['SimHei']  # 使用黑体
+    plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+
+    bond_code = operateRecordList[0].bond_code
+    bond_name = operateRecordList[0].bond_name
+
+    # 确定持仓成本的日期范围
+    min_date = min(dates)
+    max_date = max(dates)
+
+    # 获取该证劵股价
+    originalData = data.transfer.getAllDayDataOfSpecificETF(bond_code)
+    close_prices = originalData.iloc[:, 4]
+    fund_date = originalData.iloc[:, 2]
+    # 将字符串日期转换为 datetime.date 类型
+    fund_date = [datetime.strptime(date, "%Y-%m-%d").date() for date in fund_date]
+
+    # 过滤实际股价数据
+    filtered_close_prices = []
+    filtered_fund_date = []
+
+    for date, price in zip(fund_date, close_prices):
+        if min_date <= date <= max_date:
+            filtered_fund_date.append(date)
+            filtered_close_prices.append(price)
+
+    # 绘制折线图
+    plt.figure(figsize=(10, 5))
+    plt.plot(dates, costs, marker='o', label='持仓成本')
+    plt.plot(filtered_fund_date, filtered_close_prices, marker='s', label='实时价格')
+    plt.xlabel('日期')
+    plt.ylabel('持仓成本')
+    plt.title(f'持仓成本随时间的变化 - {bond_name} ({bond_code})')
+    plt.grid(True)
+    plt.xticks(rotation=45)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+# 获取每日持仓成本
+def get_daily_holding_cost(daily_cost):
+    dates = sorted(daily_cost.keys())
+    holding_cost = []
+    total_cost = 0
+    total_quantity = 0
+
+    for date in dates:
+        total_cost += daily_cost[date]['total_cost']
+        total_quantity += daily_cost[date]['total_quantity']
+        if total_quantity != 0:
+            holding_cost.append((date, total_cost / total_quantity))
+        else:
+            holding_cost.append((date, 0))
+
+    return holding_cost
+
+
+# 计算每日持仓成本
+def calculate_daily_cost(records):
+    daily_cost = defaultdict(lambda: {'total_cost': 0, 'total_quantity': 0})
+
+    for record in records:
+        date = record.bargain_time.date()
+        if record.operate_kind == 'in':
+            daily_cost[date]['total_cost'] += record.bargain_amount
+            daily_cost[date]['total_quantity'] += record.bargain_number
+        elif record.operate_kind == 'out':
+            daily_cost[date]['total_cost'] -= record.bargain_amount
+            daily_cost[date]['total_quantity'] -= record.bargain_number
+
+    return daily_cost
+
+def xirr_calculate(bondCode):
+    # 从数据库中查询该证劵交易编码对应的交易记录 按交易时间升序排序
+    operateRecordList = OperateRecord.objects.filter(bond_code=bondCode).order_by('bargain_time')
+
+    transaction_time = []
+    directions = []
+    amounts = []
+
+    for record in operateRecordList:
+        # 将日期转换为offset-naive
+        naive_bargain_time = record.bargain_time.replace(tzinfo=None)
+        transaction_time.append(naive_bargain_time)
+        directions.append(record.operate_kind)
+        amounts.append(record.bargain_amount)
+
+    cash_flows = [float(-amount) if direction == 'in' else float(amount) for direction, amount in zip(directions, amounts)]
+
+    # 获取最新的收盘价
+    presentPrice = float(data.transfer.getAllDayDataOfSpecificETF(bondCode).iloc[-1, 4])  # 将Decimal转换为float
+
+    # 计算当前持有股票的市值
+    current_holdings = sum(record.bargain_number for record in operateRecordList if record.operate_kind == 'in') - \
+                       sum(record.bargain_number for record in operateRecordList if record.operate_kind == 'out')
+    current_value = current_holdings * presentPrice
+
+    # 添加当前持有股票的市值
+    cash_flows.append(current_value)
+    transaction_time.append(datetime.strptime('2024-10-08', '%Y-%m-%d'))
+
+    # 计算XIRR
+    try:
+        xirrv = xirr(zip(transaction_time, cash_flows))
+    except Exception as e:
+        print("计算XIRR时出错:", e)
+
+    print("xirr:", xirrv)

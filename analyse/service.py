@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
 import numpy_financial as npf
+import pandas as pd
 from pyxirr import xirr
 
 from _decimal import Decimal
@@ -351,3 +352,69 @@ def xirr_calculate(bondCode):
         print("计算XIRR时出错:", e)
 
     print("xirr:", xirrv)
+
+
+
+def grid_moni(bondCode):
+    original_data = data.transfer.getAllDayDataOfSpecificETF(bondCode)
+    dates = original_data.iloc[:,2]
+    open_prices = original_data.iloc[:, 3]
+    close_prices = original_data.iloc[:, 4]
+    high_prices = original_data.iloc[:, 5]
+    low_prices = original_data.iloc[:, 6]
+    datas = {
+        'Open': open_prices,
+        'Low': low_prices,
+        'High': high_prices,
+        'Close': close_prices
+    }
+    prices = pd.DataFrame(datas)
+    grid_trading_strategy(dates, prices, 0.01, 0.01, 500, 500, bondCode)
+    return None
+
+def grid_trading_strategy(dates, prices, sell_threshold, buy_threshold, buy_share, sell_share, bond_code):
+    # 初始化变量
+    total_profit = 0
+    shares = 0
+    # current_base_price = base_price
+    current_base_price = prices['Open'][0]
+    sell_out_count = 0
+
+    # 遍历每日股票价格
+    for index, row in prices.iterrows():
+        # 按顺序处理价格变化
+        daily_prices = [row['Open'], row['Low'], row['High'], row['Close']]
+
+        for price in daily_prices:
+            # 先处理卖出逻辑
+            if price > current_base_price * (1 + sell_threshold):
+                # 卖出
+                sell_price = price
+                profit = (sell_price - current_base_price) * sell_share
+                total_profit += profit
+                shares -= sell_share
+                current_base_price = sell_price  # 更新基准价
+                sell_out_count+=1
+                break  # 卖出后跳出当前价格循环
+
+            # 然后处理买入逻辑
+            elif price < current_base_price * (1 - buy_threshold):
+                # 买入
+                buy_price = price
+                shares += buy_share
+                current_base_price = buy_price  # 更新基准价
+                break  # 买入后跳出当前价格循环
+
+    print(bond_code, 'sell out percentage', sell_out_count/len(prices['Open']))
+    # 绘制折线图
+    # plt.figure(figsize=(10, 5))
+    # plt.plot(dates, prices['Close'], marker='o', label='价格变化')
+    # plt.xlabel('日期')
+    # plt.ylabel('价格')
+    # plt.title(f'价格变化')
+    # plt.grid(True)
+    # plt.xticks(rotation=45)
+    # plt.legend()
+    # plt.tight_layout()
+    # plt.show()
+    return total_profit

@@ -6,6 +6,9 @@ from pyxirr import xirr
 from analyse.models import OperateRecord
 import numpy as np
 
+from analyse.service import grid_moni
+
+
 # Create your tests here.
 class tests(TestCase):
 
@@ -27,3 +30,6 @@ class tests(TestCase):
         import pandas as pd
         a = xirr(pd.DataFrame({"dates": dates, "amounts": amounts}))
         print("d")
+
+    def test_for2(self):
+        grid_moni(510500)

@@ -59,3 +59,14 @@ def xirr_calculate(request):
         {'id': 2, 'name': 'go'},
     ]
     return HttpResponse(json.dumps(book_list), content_type='application/json')
+
+
+# 网格交易模拟
+def moni(request):
+    bondCode = request.GET.get("bondCode")
+    result = analyse.service.grid_moni(bondCode)
+    book_list = [
+        {'id': 1, 'name': 'ptyhon'},
+        {'id': 2, 'name': 'go'},
+    ]
+    return HttpResponse(json.dumps(book_list), content_type='application/json')

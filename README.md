@@ -1,5 +1,6 @@
 股票持仓水平分析程序
 
+```sql
 CREATE TABLE `operate_record` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `ctime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -25,3 +26,4 @@ CREATE TABLE `operate_record` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_bargain_no` (`bargain_no`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=3892 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+```

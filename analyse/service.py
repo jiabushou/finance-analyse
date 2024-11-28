@@ -1,10 +1,16 @@
+import glob
 import logging
+import os
 import queue
+import re
 from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
 import numpy_financial as npf
 import pandas as pd
+import pytesseract
+from PIL import Image
+from django.utils import timezone
 from pyxirr import xirr
 
 from _decimal import Decimal
@@ -14,7 +20,7 @@ from scipy.optimize import newton
 
 import data.transfer
 from analyse.bo import OperateItem, CostOfLevelInfo
-from analyse.models import OperateRecord
+from analyse.models import OperateRecord, PurchaseInRecord, PurchaseOutRecord, MatchRelations
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -418,3 +424,256 @@ def grid_trading_strategy(dates, prices, sell_threshold, buy_threshold, buy_shar
     # plt.tight_layout()
     # plt.show()
     return total_profit
+
+def newTableConnect():
+    # 从数据库中查询该证劵交易编码对应的交易记录 按交易时间升序排序
+    operateRecordList = PurchaseInRecord.objects.order_by('id')
+    print("text")
+
+
+def initialize_outer_left_match(bondCode):
+    # 初始化买入记录的待匹配份额
+    for record in PurchaseInRecord.objects.filter(bond_code=bondCode):
+        record.left_match = record.purchase_in_count
+        record.save()
+
+    # 初始化卖出记录的待匹配份额
+    for record in PurchaseOutRecord.objects.filter(bond_code=bondCode):
+        record.left_match = record.purchase_out_count
+        record.save()
+
+    # 删除匹配记录表中的所有记录
+    MatchRelations.objects.filter(bond_code=bondCode).delete()
+
+def outer_analyse(bondCode):
+    # 初始化待匹配记录
+    initialize_outer_left_match(bondCode=bondCode)
+
+    # 取出未匹配完的卖出记录，按时间由近到远排序
+    unmatched_sell_records = PurchaseOutRecord.objects.filter(
+        left_match__gt=0,
+        bond_code=bondCode
+    ).order_by('-purchase_out_time')
+
+    total_loss = 0
+    total_profit = 0
+
+    for sell_record in unmatched_sell_records:
+        sell_unmatched_quantity = sell_record.left_match
+        sell_time = sell_record.purchase_out_time
+        sell_price = sell_record.purchase_out_single_price
+
+        # 取出未匹配完的买入记录，按时间由近到远排序
+        unmatched_buy_records = PurchaseInRecord.objects.filter(
+            left_match__gt=0,
+            bond_code=bondCode
+        ).order_by('-purchase_in_time')
+
+        # 遍历卖出记录
+        for buy_record in unmatched_buy_records:
+            buy_unmatched_quantity = buy_record.left_match
+            buy_time = buy_record.purchase_in_time
+            buy_price = buy_record.purchase_in_single_price
+
+            # 遍历买入记录
+            if buy_time <= sell_time and (
+                    buy_price < sell_price or not unmatched_buy_records.filter(purchase_in_time__lt=sell_time,
+                                                                               purchase_in_single_price__lt=sell_price).exists()):
+                # 计算匹配数量
+                match_quantity = min(sell_unmatched_quantity, buy_unmatched_quantity)
+
+                # 计算盈亏金额
+                profit_or_loss = (sell_price - buy_price) * match_quantity
+
+                if profit_or_loss > 0:
+                    # 盈利
+                    total_profit += profit_or_loss
+                    print(f"盈利: {profit_or_loss}, 匹配份额: {match_quantity}")
+                else:
+                    # 亏损
+                    total_loss += abs(profit_or_loss)
+                    print(f"亏损: {abs(profit_or_loss)}, 匹配份额: {match_quantity}")
+
+                # 更新匹配记录
+                MatchRelations.objects.create(
+                    in_uniq_id=buy_record.id,
+                    out_uniq_id=sell_record.id,
+                    match_count=match_quantity,
+                    bond_code=bondCode
+                )
+
+                # 更新买入记录的待匹配份额
+                buy_record.left_match -= match_quantity
+                buy_record.save()
+
+                # 更新卖出记录的待匹配份额
+                sell_record.left_match -= match_quantity
+                sell_unmatched_quantity -= match_quantity
+                sell_record.save()
+
+                # 如果卖出记录已完全匹配，跳出循环
+                if sell_record.left_match == 0:
+                    break
+
+    # 将总亏损金额平均分摊到未匹配的买入记录的单价当中
+    unmatched_buy_records = PurchaseInRecord.objects.filter(left_match__gt=0)
+    if unmatched_buy_records.exists():
+        average_loss_per_share = total_loss / sum([record.left_match for record in unmatched_buy_records])
+
+        # 计算每个买入记录的真实单价
+        real_prices = []
+        for buy_record in unmatched_buy_records:
+            real_price = buy_record.purchase_in_single_price + average_loss_per_share
+            real_prices.append((buy_record.id, buy_record.left_match, real_price))
+
+        # 按真实单价从小到大排序
+        real_prices.sort(key=lambda x: x[2])
+
+        # 打印买入记录的待匹配份额的真实单价，并计算相邻两个价格间的百分比差额
+        for i, (id, left_match, real_price) in enumerate(real_prices):
+            if i > 0:
+                prev_real_price = real_prices[i - 1][2]
+                percentage_diff = ((real_price - prev_real_price) / prev_real_price) * 100
+                print(
+                    f"买入记录ID: {id}, 待匹配份额: {left_match}, 真实单价: {real_price:.4f} ({percentage_diff:.2f}%)")
+            else:
+                print(f"买入记录ID: {id}, 待匹配份额: {left_match}, 真实单价: {real_price:.4f}")
+
+    print("总亏损金额:", total_loss)
+    print("总利润金额:", total_profit)
+
+    return total_loss
+
+
+def rename_file():
+    # 使用 glob 模块来匹配 .jfif 文件
+    jfif_files = glob.glob(os.path.join(r"F:\中证500场外", '**/*.jfif'), recursive=True)
+
+    # 确保路径是绝对路径
+    jfif_files = [os.path.abspath(file) for file in jfif_files]
+
+    # 按照文件名排序，确保重命名时顺序正确
+    jfif_files.sort()
+
+    # 重命名文件
+    for index, file_path in enumerate(jfif_files, start=1):
+        # 获取文件所在的目录和文件名
+        directory, filename = os.path.split(file_path)
+
+        # 构建新的文件名
+        new_filename = f"{index}.jfif"
+        new_file_path = os.path.join(directory, new_filename)
+
+        # 重命名文件
+        os.rename(file_path, new_file_path)
+        print(f"Renamed {file_path} to {new_file_path}")
+
+
+def outer_ocr():
+    # 设置 TESSDATA_PREFIX 环境变量
+    os.environ['TESSDATA_PREFIX'] = r'F:\software\tessdata'
+    # 显式指定 Tesseract 的路径
+    pytesseract.pytesseract.tesseract_cmd = r'F:\software\tesseract.exe'
+
+    # 使用 glob 模块来匹配 .jfif 文件
+    jfif_files = glob.glob(os.path.join(r"F:\中证500场外", '**/*.jfif'), recursive=True)
+
+    # 确保路径是绝对路径
+    images = [os.path.abspath(file) for file in jfif_files]
+
+    # images = [r'F:\中证500场外\15.jfif',
+    #           r'F:\中证500场外\17.jfif',
+    #           r'F:\中证500场外\9.jfif']  # 替换为实际图片路径
+
+    for image in images:
+        try:
+            print("Processing:", image)
+            text = extract_text_from_image(image)
+            # 买入信息的正则表达式模式
+            purchase_in_pattern = re.compile(r"""
+                买\s*入\s*时\s*间\s*(?P<time>\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})
+                .*?
+                确\s*认\s*份\s*额\s*(?P<shares>\d{1,3}(,\d{3})*(\.\d+)?)\s*份
+                .*?
+                确\s*认\s*净\s*值\s*(?P<price>\d+\.\d+)
+                .*?
+                手\s*续\s*费\s*(?P<fee>\d+\.\d+)\s*元
+                .*?
+                订\s*单\s*号\s*(?P<uniq_no>\d+)
+            """, re.VERBOSE | re.DOTALL)
+
+            # 卖出信息的正则表达式模式
+            purchase_out_pattern = re.compile(r"""
+                卖\s*出\s*时\s*间\s*(?P<time>\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})
+                .*?
+                确\s*认\s*份\s*额\s*(?P<shares>\d+\.\d+)\s*份
+                .*?
+                确\s*认\s*净\s*值\s*(?P<price>\d+\.\d+)
+                .*?
+                手\s*续\s*费\s*.*?\s*(?P<fee>\d+\.\d+)\s*元
+                .*?
+                订\s*单\s*号\s*(?P<uniq_no>\d+)
+            """, re.VERBOSE | re.DOTALL)
+
+            purchase_in_match = purchase_in_pattern.search(text)
+            if purchase_in_match:
+                purchase_in_data = purchase_in_match.groupdict()
+                purchase_in_data['purchase_in_time'] = timezone.make_aware(datetime.strptime(purchase_in_data['time'], '%Y-%m-%d %H:%M:%S'))
+                # shares可能包含千分位的数字，所以需要处理
+                purchase_in_data['shares'] = purchase_in_data['shares'].replace(',', '')
+                purchase_in_data['purchase_in_count'] = float(purchase_in_data['shares'])
+                # price可能包含千分位的数字，所以需要处理
+                purchase_in_data['price'] = purchase_in_data['price'].replace(',', '')
+                purchase_in_data['purchase_in_single_price'] = float(purchase_in_data['price'])
+                purchase_in_data['purchase_fee'] = float(purchase_in_data['fee'])
+                purchase_in_data['purchase_in_uniq_no'] = purchase_in_data['uniq_no']
+                purchase_in_data['left_match'] = float(purchase_in_data['shares'])
+
+                # 创建买入记录
+                PurchaseInRecord.objects.create(
+                    purchase_in_time=purchase_in_data['purchase_in_time'],
+                    purchase_in_count=purchase_in_data['purchase_in_count'],
+                    purchase_in_single_price=purchase_in_data['purchase_in_single_price'],
+                    purchase_fee=purchase_in_data['purchase_fee'],
+                    purchase_in_uniq_no=purchase_in_data['purchase_in_uniq_no'],
+                    left_match=purchase_in_data['left_match'],
+                    ctime=timezone.make_aware(datetime.now()),
+                    mtime=timezone.make_aware(datetime.now())
+                )
+                print("买入插入")
+                continue
+
+            # 解析卖出信息
+            purchase_out_match = purchase_out_pattern.search(text)
+            if purchase_out_match:
+                purchase_out_data = purchase_out_match.groupdict()
+                purchase_out_data['purchase_out_time'] = timezone.make_aware(datetime.strptime(purchase_out_data['time'], '%Y-%m-%d %H:%M:%S'))
+                purchase_out_data['purchase_out_count'] = float(purchase_out_data['shares'])
+                purchase_out_data['purchase_out_single_price'] = float(purchase_out_data['price'])
+                purchase_out_data['purchase_fee'] = float(purchase_out_data['fee'])
+                purchase_out_data['purchase_out_uniq_no'] = purchase_out_data['uniq_no']
+                purchase_out_data['left_match'] = float(purchase_out_data['shares'])
+
+                # 创建卖出记录
+                PurchaseOutRecord.objects.create(
+                    purchase_out_time=purchase_out_data['purchase_out_time'],
+                    purchase_out_count=purchase_out_data['purchase_out_count'],
+                    purchase_out_single_price=purchase_out_data['purchase_out_single_price'],
+                    purchase_fee=purchase_out_data['purchase_fee'],
+                    purchase_out_uniq_no=purchase_out_data['purchase_out_uniq_no'],
+                    left_match=purchase_out_data['left_match'],
+                    ctime=timezone.make_aware(datetime.now()),
+                    mtime=timezone.make_aware(datetime.now())
+                )
+                print("卖出插入")
+                continue
+        except Exception as e:
+            print(f"处理图片 {image} 时发生错误: {e}")
+
+
+
+def extract_text_from_image(image_path):
+    """从图片中提取文本"""
+    image = Image.open(image_path)
+    text = pytesseract.image_to_string(image, lang='chi_sim')
+    return text

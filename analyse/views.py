@@ -14,6 +14,7 @@ from analyse.models import OperateRecord
 from analyse.service import analyseSpecificBond, addOperateRecord, analyseCostChangeOfSpecificBond
 
 
+
 def test(request):
     return HttpResponse("分析模块连通性测试")
 
@@ -65,6 +66,48 @@ def xirr_calculate(request):
 def moni(request):
     bondCode = request.GET.get("bondCode")
     result = analyse.service.grid_moni(bondCode)
+    book_list = [
+        {'id': 1, 'name': 'ptyhon'},
+        {'id': 2, 'name': 'go'},
+    ]
+    return HttpResponse(json.dumps(book_list), content_type='application/json')
+
+def newTableConnect(request):
+    analyse.service.newTableConnect()
+    book_list = [
+        {'id': 1, 'name': 'ptyhon'},
+        {'id': 2, 'name': 'go'},
+    ]
+    return HttpResponse(json.dumps(book_list), content_type='application/json')
+
+def initializeOuterLeftMatch(request):
+    bondCode = request.GET.get("bondCode")
+    analyse.service.initialize_outer_left_match(bondCode)
+    book_list = [
+        {'id': 1, 'name': 'ptyhon'},
+        {'id': 2, 'name': 'go'},
+    ]
+    return HttpResponse(json.dumps(book_list), content_type='application/json')
+
+def outerAnalyse(request):
+    bondCode = request.GET.get("bondCode")
+    result = analyse.service.outer_analyse(bondCode)
+    book_list = [
+        {'id': 1, 'name': 'ptyhon'},
+        {'id': 2, 'name': 'go'},
+    ]
+    return HttpResponse(json.dumps(book_list), content_type='application/json')
+
+def renameFile(request):
+    result = analyse.service.rename_file()
+    book_list = [
+        {'id': 1, 'name': 'ptyhon'},
+        {'id': 2, 'name': 'go'},
+    ]
+    return HttpResponse(json.dumps(book_list), content_type='application/json')
+
+def outerOcr(request):
+    result = analyse.service.outer_ocr()
     book_list = [
         {'id': 1, 'name': 'ptyhon'},
         {'id': 2, 'name': 'go'},

@@ -12,6 +12,9 @@ from django.db import models
 # Feel free to rename the models, but don't rename db_table values or field names.
 
 
+
+
+
 class OperateRecord(models.Model):
     id = models.BigAutoField(primary_key=True)
     ctime = models.DateTimeField(db_comment='创建时间')
@@ -38,3 +41,53 @@ class OperateRecord(models.Model):
     class Meta:
         managed = False
         db_table = 'operate_record'
+
+
+class PurchaseInRecord(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    ctime = models.DateTimeField(db_comment='创建时间')
+    mtime = models.DateTimeField(db_comment='修改时间')
+    purchase_in_time = models.DateTimeField(blank=True, null=True, db_comment='买入时间')
+    purchase_in_count = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True, db_comment='买入份额')
+    purchase_in_single_price = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True, db_comment='买入单价')
+    purchase_fee = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True, db_comment='买入手续费')
+    purchase_in_uniq_no = models.CharField(max_length=255, blank=True, null=True, db_comment='买入唯一编号')
+    left_match = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True, db_comment='待匹配份额')
+    bond_code = models.CharField(max_length=255, db_comment='基金编码')
+    bond_name = models.CharField(max_length=255, db_comment='基金名称')
+
+    class Meta:
+        managed = False
+        db_table = 'purchase_in_record'
+
+
+class PurchaseOutRecord(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    ctime = models.DateTimeField(db_comment='创建时间')
+    mtime = models.DateTimeField(db_comment='修改时间')
+    purchase_out_time = models.DateTimeField(blank=True, null=True, db_comment='买入时间')
+    purchase_out_count = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True, db_comment='买入份额')
+    purchase_out_single_price = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True, db_comment='买入单价')
+    purchase_fee = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True, db_comment='买入手续费')
+    purchase_out_uniq_no = models.CharField(max_length=255, blank=True, null=True, db_comment='买入唯一编号')
+    left_match = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True, db_comment='待匹配份额')
+    bond_code = models.CharField(max_length=255, db_comment='基金编码')
+    bond_name = models.CharField(max_length=255, db_comment='基金名称')
+
+    class Meta:
+        managed = False
+        db_table = 'purchase_out_record'
+
+
+class MatchRelations(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    ctime = models.DateTimeField(auto_now_add=True, db_comment='创建时间')
+    mtime = models.DateTimeField(auto_now=True, db_comment='卖出记录ID')
+    in_uniq_id = models.BigIntegerField(db_comment='买入记录ID')
+    out_uniq_id = models.BigIntegerField(db_comment='卖出记录ID')
+    match_count = models.DecimalField(max_digits=10, decimal_places=4, blank=True, null=True, db_comment='匹配份额')
+    bond_code = models.CharField(max_length=255, db_comment='基金编码')
+
+    class Meta:
+        managed = False
+        db_table = 'match_relations'

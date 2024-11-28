@@ -79,7 +79,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'finance_analyse',
         'USER': 'root',
-        'PASSWORD': 'n871293a123',
+        'PASSWORD': 'n871293',
         'HOST': 'localhost',
         'PORT': '3306',
     }

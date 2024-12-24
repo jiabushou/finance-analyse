@@ -1,18 +1,11 @@
 import json
-import queue
-
-from django.forms import model_to_dict
-from django.shortcuts import render
 
 # Create your views here.
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
-import analyse
-from analyse.bo import OperateItem
-from analyse.models import OperateRecord
-from analyse.service import analyseSpecificBond, addOperateRecord, analyseCostChangeOfSpecificBond
-
+from analyse.service import simulate
+from analyse.service import analyses
 
 
 def test(request):
@@ -23,7 +16,7 @@ def test(request):
 def analyseOperateItem(request):
     bondCode = request.GET.get("bondCode")
     # return HttpResponse(analyseSpecificBond(bondCode))
-    result = analyseSpecificBond(bondCode)
+    result = analyses.analyseSpecificBond(bondCode)
     book_list = [
         {'id': 1, 'name': 'ptyhon'},
         {'id': 2, 'name': 'go'},
@@ -37,7 +30,7 @@ def analyseOperateItem(request):
 def add(request):
     try:
         fild_obj = request.FILES.get("file")
-        result = addOperateRecord(fild_obj)
+        result = analyses.addOperateRecord(fild_obj)
         return HttpResponse(json.dumps(result, ensure_ascii=False))
     except Exception as e:
         return HttpResponse(json.dumps({"code":500,"msg":"导入错误"}, ensure_ascii=False))
@@ -45,7 +38,7 @@ def add(request):
 
 def analyseCostChange(request):
     bondCode = request.GET.get("bondCode")
-    result = analyseCostChangeOfSpecificBond(bondCode)
+    result = analyses.analyseCostChangeOfSpecificBond(bondCode)
     book_list = [
         {'id': 1, 'name': 'ptyhon'},
         {'id': 2, 'name': 'go'},
@@ -54,7 +47,7 @@ def analyseCostChange(request):
 
 def xirr_calculate(request):
     bondCode = request.GET.get("bondCode")
-    result = analyse.service.xirr_calculate(bondCode)
+    result = analyses.xirr_calculate(bondCode)
     book_list = [
         {'id': 1, 'name': 'ptyhon'},
         {'id': 2, 'name': 'go'},
@@ -65,7 +58,7 @@ def xirr_calculate(request):
 # 网格交易模拟
 def moni(request):
     bondCode = request.GET.get("bondCode")
-    result = analyse.service.grid_moni(bondCode)
+    result = simulate.grid_moni_1(bondCode)
     book_list = [
         {'id': 1, 'name': 'ptyhon'},
         {'id': 2, 'name': 'go'},
@@ -73,7 +66,7 @@ def moni(request):
     return HttpResponse(json.dumps(book_list), content_type='application/json')
 
 def newTableConnect(request):
-    analyse.service.newTableConnect()
+    newTableConnect()
     book_list = [
         {'id': 1, 'name': 'ptyhon'},
         {'id': 2, 'name': 'go'},
@@ -82,7 +75,7 @@ def newTableConnect(request):
 
 def initializeOuterLeftMatch(request):
     bondCode = request.GET.get("bondCode")
-    analyse.service.initialize_outer_left_match(bondCode)
+    analyses.initialize_outer_left_match(bondCode)
     book_list = [
         {'id': 1, 'name': 'ptyhon'},
         {'id': 2, 'name': 'go'},
@@ -91,7 +84,7 @@ def initializeOuterLeftMatch(request):
 
 def outerAnalyse(request):
     bondCode = request.GET.get("bondCode")
-    result = analyse.service.outer_analyse(bondCode)
+    result = analyses.outer_analyse(bondCode)
     book_list = [
         {'id': 1, 'name': 'ptyhon'},
         {'id': 2, 'name': 'go'},
@@ -99,7 +92,7 @@ def outerAnalyse(request):
     return HttpResponse(json.dumps(book_list), content_type='application/json')
 
 def renameFile(request):
-    result = analyse.service.rename_file()
+    result = analyses.rename_file()
     book_list = [
         {'id': 1, 'name': 'ptyhon'},
         {'id': 2, 'name': 'go'},
@@ -107,7 +100,7 @@ def renameFile(request):
     return HttpResponse(json.dumps(book_list), content_type='application/json')
 
 def outerOcr(request):
-    result = analyse.service.outer_ocr()
+    result = analyses.outer_ocr()
     book_list = [
         {'id': 1, 'name': 'ptyhon'},
         {'id': 2, 'name': 'go'},

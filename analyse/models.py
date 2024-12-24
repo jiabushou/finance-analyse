@@ -39,7 +39,7 @@ class OperateRecord(models.Model):
     bond_full_name = models.CharField(max_length=10, db_comment='证劵中文全称')
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'operate_record'
 
 
@@ -57,7 +57,7 @@ class PurchaseInRecord(models.Model):
     bond_name = models.CharField(max_length=255, db_comment='基金名称')
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'purchase_in_record'
 
 
@@ -75,7 +75,7 @@ class PurchaseOutRecord(models.Model):
     bond_name = models.CharField(max_length=255, db_comment='基金名称')
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'purchase_out_record'
 
 
@@ -89,5 +89,5 @@ class MatchRelations(models.Model):
     bond_code = models.CharField(max_length=255, db_comment='基金编码')
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'match_relations'

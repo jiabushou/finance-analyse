@@ -87,6 +87,11 @@ def analyseSpecificBond(bondCode):
     purchaseInOperateItemWaitForMatch = []
     profit = 0
     loss = 0
+    profit_in_cost = 0
+
+    # 用于计算已确认收益XIRR
+    confirm_transaction_time = []
+    confirm_cash_flow = []
     # 取出队头交易记录
     while not queueFor100Unit.empty():
         operateRecordHead = queueFor100Unit.get()
@@ -107,11 +112,38 @@ def analyseSpecificBond(bondCode):
             # 买入>卖出 亏损
             if inAmount > outAmount:
                 loss += (inAmount - outAmount)*100
+                # 买入价降低至卖出价,保证此次交易不亏损
+                profit_in_cost += outAmount * 100
+
+                # 计算xirr使用
+                # 买入流水
+                confirm_cash_flow.append(-outAmount*100)
+                confirm_transaction_time.append(purchaseInOperateItemMatched.operateTime)
+                # 卖出流水
+                confirm_cash_flow.append(outAmount*100)
+                confirm_transaction_time.append(operateRecordHead.operateTime)
             # 买入<=卖出 盈利
             else:
                 profit += (outAmount - inAmount)*100
+                profit_in_cost += inAmount * 100
+
+                # 计算xirr使用
+                # 买入流水
+                confirm_cash_flow.append(-inAmount*100)
+                confirm_transaction_time.append(purchaseInOperateItemMatched.operateTime)
+                # 卖出流水
+                confirm_cash_flow.append(outAmount*100)
+                confirm_transaction_time.append(operateRecordHead.operateTime)
         else:
             raise WealthException("操作类型无法识别", operateRecordHead.operateKind)
+
+    # 计算XIRR
+    try:
+        xirrv = xirr(zip(confirm_transaction_time, confirm_cash_flow))
+    except Exception as e:
+        print("计算XIRR时出错:", e)
+
+    print("xirr:", xirrv)
 
     # 将亏损金额平摊到未匹配的PurchaseIn集合中
     # 如果所有买入记录均已匹配,则不需要均摊
@@ -142,7 +174,9 @@ def analyseSpecificBond(bondCode):
         for temp in costOfLevelList:
             print("unitPrice:", temp.unitPrice, "share:", temp.share)
         # print(bondCode + "筹码水平为:" +costOfLevelList)
-    print("手续费:", totalFee, "盈利:", profit, "亏损:", loss)
+    confirm_profit_rate = profit/profit_in_cost
+    percentage = "{:.2%}".format(confirm_profit_rate)
+    print("手续费:", totalFee, "盈利:", profit, "亏损:", loss, "已确认收益率", percentage)
 
     # 获取最新的收盘价
     presentPrice = data.transfer.getAllDayDataOfSpecificETF(bondCode).iloc[-1, 4]
@@ -357,14 +391,6 @@ def xirr_calculate(bondCode):
 
     print("xirr:", xirrv)
 
-
-
-
-
-def newTableConnect():
-    # 从数据库中查询该证劵交易编码对应的交易记录 按交易时间升序排序
-    operateRecordList = PurchaseInRecord.objects.order_by('id')
-    print("text")
 
 
 def initialize_outer_left_match(bondCode):

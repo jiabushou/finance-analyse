@@ -15,8 +15,6 @@ urlpatterns = [
     path("xirr", views.xirr_calculate, name="xirrCalculate"),
     # 模拟网格交易
     path("moni", views.moni, name="moni"),
-    # 测试新表连通性
-    path("testAnalyse", views.newTableConnect, name="newTableConnect"),
     # 场外基金筹码水平分析
     path("outerAnalyse", views.outerAnalyse, name="outerAnalyse"),
     # 场外基金交易记录ocr识别并存储
@@ -25,4 +23,8 @@ urlpatterns = [
     path("renameFile", views.renameFile, name="renameFile"),
     # 初始化待匹配记录
     path("initializeOuterLeftMatch", views.initializeOuterLeftMatch, name="initializeOuterLeftMatch"),
+    # 移动平均策略
+    path("averageMoni", views.averageMoni, name="averageMoni"),
+    # akshare数据获取
+    path("akshareTest", views.akshareTest, name="akshareTest")
 ]

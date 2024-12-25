@@ -65,13 +65,6 @@ def moni(request):
     ]
     return HttpResponse(json.dumps(book_list), content_type='application/json')
 
-def newTableConnect(request):
-    newTableConnect()
-    book_list = [
-        {'id': 1, 'name': 'ptyhon'},
-        {'id': 2, 'name': 'go'},
-    ]
-    return HttpResponse(json.dumps(book_list), content_type='application/json')
 
 def initializeOuterLeftMatch(request):
     bondCode = request.GET.get("bondCode")
@@ -106,3 +99,14 @@ def outerOcr(request):
         {'id': 2, 'name': 'go'},
     ]
     return HttpResponse(json.dumps(book_list), content_type='application/json')
+
+
+def averageMoni(request):
+    bondCode = request.GET.get("bondCode")
+    result = simulate.average_move_category(bondCode)
+    return HttpResponse(json.dumps(result, ensure_ascii=False))
+
+def akshareTest(request):
+    bondCode = request.GET.get("bondCode")
+    result = simulate.akshare_test(bondCode)
+    return HttpResponse(json.dumps(result, ensure_ascii=False))

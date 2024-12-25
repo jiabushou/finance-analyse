@@ -1,17 +1,22 @@
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import matplotlib.dates as mdates
 
-import data
+import data.transfer
+import akshare as ak
 
+def akshare_test(bondCode):
+    stock_value_em_df = ak.stock_value_em(symbol=bondCode)
+    print(stock_value_em_df)
 
 def grid_moni(bondCode):
     original_data = data.transfer.getAllDayDataOfSpecificETF(bondCode)
     # 日期
-    dates = original_data.iloc[:,2]
+    dates = original_data.iloc[:, 2]
     # 开盘价
     open_prices = original_data.iloc[:, 3]
     # 收盘价
@@ -330,3 +335,143 @@ def grid_trading_strategy(dates, prices, sell_threshold, buy_threshold, buy_shar
     plt.tight_layout()
     plt.show()
     return total_profit
+
+
+def average_move_category(bondCode):
+    original_data = data.transfer.getAllDayDataOfSpecificETF(bondCode)
+
+    # 构建价格DataFrame
+    prices = pd.DataFrame({
+        'Date': original_data.iloc[:, 2],
+        'Open': original_data.iloc[:, 3],
+        'Low': original_data.iloc[:, 6],
+        'High': original_data.iloc[:, 5],
+        'Close': original_data.iloc[:, 4]
+    })
+    calculate_multiple_parameters(prices)
+
+def calculate_multiple_parameters(prices, ma_windows=[10, 20, 30], std_devs=[1.5, 2, 2.5], initial_capital=1000000):
+    """
+    计算不同参数组合下的均值回归策略收益率
+
+    参数:
+    prices: DataFrame, 价格数据
+    ma_windows: list, 移动平均窗口期列表
+    std_devs: list, 标准差倍数列表
+    initial_capital: float, 初始资金
+
+    返回:
+    DataFrame: 不同参数组合下的年化收益率和夏普比率
+    """
+
+    results = []
+
+    for window in ma_windows:
+        for std_dev in std_devs:
+            # 复制价格数据
+            df = prices.copy()
+            df['Date'] = pd.to_datetime(df['Date'])
+            df = df.sort_values('Date').reset_index(drop=True)
+
+            # 计算移动平均和标准差
+            df['MA'] = df['Close'].rolling(window=window).mean()
+            df['STD'] = df['Close'].rolling(window=window).std()
+            df['Upper'] = df['MA'] + std_dev * df['STD']
+            df['Lower'] = df['MA'] - std_dev * df['STD']
+
+            # 初始化变量
+            position = 0
+            cash = initial_capital
+            trades = []
+            daily_returns = []
+            prev_value = initial_capital
+
+            # 遍历价格数据
+            for i in range(window, len(df)):
+                current_price = df.iloc[i]['Close']
+                current_date = df.iloc[i]['Date']
+
+                # 计算当前总资产价值
+                current_value = cash + position * current_price
+                daily_return = (current_value - prev_value) / prev_value
+                daily_returns.append(daily_return)
+                prev_value = current_value
+
+                # 计算可买入数量
+                max_shares = (cash // (current_price * 100)) * 100
+
+                # 交易逻辑
+                if current_price < df.iloc[i]['Lower'] and position == 0 and max_shares > 0:
+                    shares_to_buy = min(max_shares, 1000)
+                    position = shares_to_buy
+                    cash -= shares_to_buy * current_price
+                    trades.append({
+                        'Date': current_date,
+                        'Type': 'Buy',
+                        'Price': current_price,
+                        'Shares': shares_to_buy,
+                        'Cash': cash
+                    })
+
+                elif current_price > df.iloc[i]['Upper'] and position > 0:
+                    cash += position * current_price
+                    trades.append({
+                        'Date': current_date,
+                        'Type': 'Sell',
+                        'Price': current_price,
+                        'Shares': position,
+                        'Cash': cash
+                    })
+                    position = 0
+
+            # 强制平仓
+            if position > 0:
+                final_price = df.iloc[-1]['Close']
+                cash += position * final_price
+                trades.append({
+                    'Date': df.iloc[-1]['Date'],
+                    'Type': 'Sell',
+                    'Price': final_price,
+                    'Shares': position,
+                    'Cash': cash
+                })
+
+            # 计算收益指标
+            total_days = (df.iloc[-1]['Date'] - df.iloc[window]['Date']).days
+            total_return = (cash - initial_capital) / initial_capital
+            annual_return = (1 + total_return) ** (365 / total_days) - 1
+
+            # 计算夏普比率
+            daily_returns = np.array(daily_returns)
+            annual_volatility = np.std(daily_returns) * np.sqrt(252)
+            risk_free_rate = 0.03  # 假设无风险利率为3%
+            sharpe_ratio = (annual_return - risk_free_rate) / annual_volatility if annual_volatility != 0 else 0
+
+            # 计算最大回撤
+            cumulative_returns = np.cumprod(1 + daily_returns)
+            running_max = np.maximum.accumulate(cumulative_returns)
+            drawdowns = (running_max - cumulative_returns) / running_max
+            max_drawdown = np.max(drawdowns) * 100
+
+            # 统计交易次数
+            trade_count = len(trades)
+
+            results.append({
+                'MA_Window': window,
+                'STD_Dev': std_dev,
+                'Annual_Return(%)': annual_return * 100,
+                'Sharpe_Ratio': sharpe_ratio,
+                'Max_Drawdown(%)': max_drawdown,
+                'Trade_Count': trade_count
+            })
+
+    # 创建结果DataFrame
+    results_df = pd.DataFrame(results)
+    results_df = results_df.sort_values('Annual_Return(%)', ascending=False)
+    return results_df
+
+# 使用示例:
+# ma_windows = [10, 15, 20, 25, 30]
+# std_devs = [1.5, 2.0, 2.5, 3.0]
+# results = calculate_multiple_parameters(prices, ma_windows, std_devs)
+# print(results)
